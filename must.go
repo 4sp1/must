@@ -6,23 +6,39 @@ import (
 )
 
 type Controller[T any] interface {
-	Recover(err error) T
+	Fallback(err error) T
+}
+
+type ErrorHandler interface {
+	Handle(err error)
+}
+
+type errorHandler[T any] struct {
+	c Controller[T]
+}
+
+func (h errorHandler[T]) Handle(err error) {
+	h.c.Fallback(err)
+}
+
+func HandlerOf[T any](c Controller[T]) ErrorHandler {
+	return errorHandler[T]{c}
 }
 
 func Do[T any](c Controller[T]) func(func() (T, error)) T {
 	return func(f func() (T, error)) T {
 		v, err := f()
 		if err != nil {
-			v = c.Recover(err)
+			v = c.Fallback(err)
 		}
 		return v
 	}
 }
 
-func Recover[T any](c Controller[T]) func(func() error) {
+func Recover[T any](h ErrorHandler) func(func() error) {
 	return func(f func() error) {
 		if err := f(); err != nil {
-			c.Recover(err)
+			h.Handle(err)
 		}
 	}
 }
@@ -35,16 +51,20 @@ func Have[T any](c Controller[T]) func(T, error) T {
 	}
 }
 
-func ControllerExits[T any](code int) Controller[T] {
-	return controllerExits[T]{code: code}
+func ExitHandler(code int) ErrorHandler {
+	return HandlerOf(exitController[struct{}]{code: code})
 }
 
-type controllerExits[T any] struct {
+func ExitController[T any](code int) Controller[T] {
+	return exitController[T]{code: code}
+}
+
+type exitController[T any] struct {
 	code     int
 	fallback T
 }
 
-func (c controllerExits[T]) Recover(err error) T {
+func (c exitController[T]) Fallback(err error) T {
 	fmt.Println(err)
 	os.Exit(c.code)
 	return c.fallback
