@@ -56,12 +56,13 @@ func ExitHandler(code int) ErrorHandler {
 }
 
 func ExitController[T any](code int) Controller[T] {
-	return exitController[T]{code: code}
+	return exitController[T]{code: code, exitFunc: os.Exit}
 }
 
 type exitController[T any] struct {
 	code     int
-	fallback T
+	fallback T              // only to satisfy exitController.Fallback return
+	exitFunc func(code int) // makes exit behavior testable
 }
 
 func (c exitController[T]) Fallback(err error) T {
